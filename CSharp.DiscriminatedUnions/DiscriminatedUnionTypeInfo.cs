@@ -1,9 +1,5 @@
 ﻿// ReSharper disable NotAccessedPositionalProperty.Global
-
-
-using System.Collections.Generic;
 using System.Collections.Immutable;
-using System.Linq;
 
 
 namespace CSharp.DiscriminatedUnions;
@@ -20,21 +16,17 @@ public record DiscriminatedUnionTypeInfo(
     string NameWithParameters,
     string UniqueName,
     ImmutableArray<UnionCaseInfo> Cases,
-    bool GenerateToString)
-{
-    public IEnumerable<UnionCaseParameterInfo> Parameters =>
-        this.Cases.SelectMany(@case => @case.Parameters);
-}
+    bool GenerateToString);
 
 
 public record UnionCaseInfo(
     string Name,
+    string NameAsArgument,
     string Type,
     ImmutableArray<UnionCaseParameterInfo> Parameters);
 
 
 public record UnionCaseParameterInfo(
     string Type,
-    string Name,
-    string FieldName
+    string Name
 );

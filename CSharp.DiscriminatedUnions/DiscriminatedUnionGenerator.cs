@@ -1,10 +1,11 @@
-﻿using System.Collections.Immutable;
+﻿using System;
+using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
-using Scriban;
 
 
 namespace CSharp.DiscriminatedUnions;
@@ -45,15 +46,6 @@ public class NewDiscriminatedUnionGenerator : IIncrementalGenerator
                     /// </example>
                     [AttributeUsage(AttributeTargets.Class | AttributeTargets.Struct)]
                     internal class DiscriminatedUnionAttribute : Attribute
-                    {
-                    }
-
-
-                    /// <summary>
-                    /// Declares cases for a <see cref="DiscriminatedUnionAttribute">Discriminated Union</see>.
-                    /// </summary>
-                    [AttributeUsage(AttributeTargets.Method)]
-                    internal class CaseAttribute : Attribute
                     {
                     }
                 }
@@ -100,7 +92,7 @@ public class NewDiscriminatedUnionGenerator : IIncrementalGenerator
                 );
 
                 var fileName = $"{info.UniqueName}.g.cs";
-                var text = DiscriminatedUnionTemplate.Render(info, member => member.Name);
+                var text = Render(info);
 
                 return (fileName, text);
             }).Where(x => !string.IsNullOrEmpty(x.text));
@@ -112,10 +104,94 @@ public class NewDiscriminatedUnionGenerator : IIncrementalGenerator
         });
     }
 
+    private static string Render(DiscriminatedUnionTypeInfo info)
+    {
+        var builder = new StringBuilder();
 
-    private static readonly Template DiscriminatedUnionTemplate =
-        ScribanTemplate.Parse("ScribanTemplates", "DiscriminatedUnion.scriban");
+        foreach(var ns in info.NamespaceDeclarations)
+        {
+            if (ns.Declaration is not null)
+                builder.AppendLine($"namespace {ns.Declaration};");
+            builder.Append(ns.UsingStatements);
+        }
 
+        foreach(var type in info.TypeDeclarations)
+        {
+            builder.AppendLine(type.Declaration);
+        }
+
+        builder.AppendLine("{");
+
+        foreach (var unionCase in info.Cases)
+        {
+            var paramsBuilder = new StringBuilder();
+            var paramNamesBuilder = new StringBuilder();
+            builder.Append($"    private sealed record {unionCase.Name}_case(");
+            switch(unionCase.Parameters)
+            {
+                case { Length: 0 }:
+                    paramsBuilder.Append(")");
+                    paramNamesBuilder.Append(")");
+                    break;
+                case { Length: 1 }:
+                    paramsBuilder.Append($"{unionCase.Parameters[0].Type} {unionCase.Parameters[0].Name})");
+                    paramNamesBuilder.Append($"{unionCase.Parameters[0].Name})");
+                    break;
+                default:
+                    for(var i = 0; i < unionCase.Parameters.Length; i++)
+                    {
+                        paramsBuilder.AppendLine();
+                        paramsBuilder.Append($"        {unionCase.Parameters[i].Type} {unionCase.Parameters[i].Name}");
+        
+                        paramNamesBuilder.AppendLine();
+                        paramNamesBuilder.Append($"        {unionCase.Parameters[i].Name}");
+
+                        if (i < unionCase.Parameters.Length - 1)
+                        {
+                            paramsBuilder.Append(", ");
+                            paramNamesBuilder.Append(", ");
+                        }
+                        else
+                        {
+                            paramsBuilder.Append(")");
+                            paramNamesBuilder.Append(")");
+                        }
+                    }
+                    break;
+            }
+            var parameters = paramsBuilder.ToString();
+            builder.Append(parameters);
+            builder.AppendLine($" : {info.NameWithParameters};");
+            builder.AppendLine($$"""
+                    public static partial {{info.NameWithParameters}} {{unionCase.Name}}({{parameters}} =>
+                        new {{unionCase.Name}}_case({{paramNamesBuilder}};
+                """);
+        }
+
+        builder.AppendLine($"    public TResult Match<TResult>(");
+        builder.Join(',' + Environment.NewLine, info.Cases, (unionCase, b) =>
+        {
+            b.Append("        Func<");
+            b.Join("", unionCase.Parameters.Select(p => $"{p.Type}, "));
+            b.Append($"TResult> {unionCase.NameAsArgument}");
+        });
+
+        builder.AppendLine(") => this switch");
+        builder.AppendLine("    {");
+
+        foreach(var unionCase in info.Cases)
+        {
+            builder.Append($"        {unionCase.Name}_case c => {unionCase.NameAsArgument}(");
+            builder.Join(", ", unionCase.Parameters.Select(p => $"c.{p.Name}"));
+            builder.AppendLine("), ");
+        }
+
+        builder.AppendLine($"        _ => throw new Exception()");
+        builder.AppendLine("    };");
+
+        builder.AppendLine("}");
+        return builder.ToString();
+    }
 
     private static bool OverridesToString(ITypeSymbol typeSymbol)
     {
@@ -164,10 +240,7 @@ public class NewDiscriminatedUnionGenerator : IIncrementalGenerator
             {
                 IsPartialDefinition: true,
                 TypeParameters.IsEmpty: true
-            } method
-            && method
-                .GetAttributes()
-                .Any(x => x.AttributeClass?.ToDisplayString() == CaseAttributeClass))
+            } method)
         {
             methodSymbol = method;
             return true;
@@ -182,16 +255,20 @@ public class NewDiscriminatedUnionGenerator : IIncrementalGenerator
 
     private static UnionCaseInfo CreateUnionCaseInfo(IMethodSymbol method)
     {
+        var nameAsArgument = char.IsUpper(method.Name[0])
+            ? char.ToLower(method.Name[0]) + method.Name.Substring(1)
+            : '_' + method.Name;
+
         return new UnionCaseInfo(
             method.Name,
+            nameAsArgument,
             method.ReturnType.ToDisplayString(),
-            GetUnionParametersInfo(method.Name, method.Parameters)
+            GetUnionParametersInfo(method.Parameters)
         );
     }
 
 
-    private static ImmutableArray<UnionCaseParameterInfo> GetUnionParametersInfo(
-        string prefix, ImmutableArray<IParameterSymbol> parameters)
+    private static ImmutableArray<UnionCaseParameterInfo> GetUnionParametersInfo(ImmutableArray<IParameterSymbol> parameters)
     {
         var builder = ImmutableArray.CreateBuilder<UnionCaseParameterInfo>(parameters.Length);
 
@@ -199,18 +276,10 @@ public class NewDiscriminatedUnionGenerator : IIncrementalGenerator
         {
             var type = parameter.Type.ToDisplayString();
             var name = parameter.Name;
-            builder.Add(new UnionCaseParameterInfo(type, name, $"{prefix}_{name}"));
+            builder.Add(new UnionCaseParameterInfo(type, name));
         }
 
         return builder.MoveToImmutable();
-    }
-
-
-    private static string? GetNamespace(ISymbol type)
-    {
-        return type.ContainingNamespace.IsGlobalNamespace
-            ? null
-            : type.ContainingNamespace.ToDisplayString();
     }
 
 
@@ -284,10 +353,30 @@ public class NewDiscriminatedUnionGenerator : IIncrementalGenerator
             .Replace('>', ']');
     }
 
-
     private static string GetTypeNameWithParameters(ISymbol symbol)
     {
         return string.Join("",
             symbol.ToDisplayParts().SkipWhile(x => x.Kind is SymbolDisplayPartKind.Punctuation));
+    }
+}
+
+internal static class Extensions
+{
+    public static void Join(this StringBuilder builder, string seperator, IEnumerable<string> strings) =>
+        builder.Join(seperator, strings, (s, b) => b.Append(s));
+
+    public static void Join<T>(this StringBuilder builder, string seperator, IEnumerable<T> items, Action<T, StringBuilder> action)
+    {
+        var enumerator = items.GetEnumerator();
+        var cont = enumerator.MoveNext();
+        while (cont)
+        {
+            action(enumerator.Current, builder);
+            cont = enumerator.MoveNext();
+            if (cont)
+            {
+                builder.Append(seperator);
+            }
+        }
     }
 }
