@@ -35,6 +35,13 @@ public class Tests
     [Fact]
     public void MatchGeneric()
     {
-        var success = Result<int>.Success(1);
+        var success = Result.Success(1);
+        var failure = Result.Failure<int>("error");
+        Func<Result<int>, string> match = r => r.Match(
+            i => i.ToString(),
+            e => e);
+
+        Assert.Equal("1", match(success));
+        Assert.Equal("error", match(failure));
     }
 }

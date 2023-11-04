@@ -16,7 +16,6 @@ public class NewDiscriminatedUnionGenerator : IIncrementalGenerator
 {
     private const string DiscriminatedUnion = nameof(DiscriminatedUnion);
     private const string DiscriminatedUnionAttribute = nameof(DiscriminatedUnionAttribute);
-    private const string CaseAttributeClass = "CSharp.DiscriminatedUnions.CaseAttribute";
 
 
     public void Initialize(IncrementalGeneratorInitializationContext context)
@@ -70,20 +69,22 @@ public class NewDiscriminatedUnionGenerator : IIncrementalGenerator
                     return default;
                 }
 
-                var cases = GetCasesInfo(typeSymbol);
+                var (namespaces, types, genericArguments) = GetDeclarationInfo(typeSyntax);
+
+                var cases = GetCasesInfo(typeSymbol, genericArguments);
                 if (cases.IsEmpty)
                 {
                     return default;
                 }
 
                 var overridesToString = OverridesToString(typeSymbol);
-                var (namespaces, types) = GetDeclarationInfo(typeSyntax);
-
+   
                 token.ThrowIfCancellationRequested();
 
                 var info = new DiscriminatedUnionTypeInfo(
                     namespaces,
                     types,
+                    genericArguments,
                     typeSymbol.Name,
                     GetTypeNameWithParameters(typeSymbol),
                     GetUniqueTypeName(typeSymbol),
@@ -117,17 +118,23 @@ public class NewDiscriminatedUnionGenerator : IIncrementalGenerator
 
         foreach(var type in info.TypeDeclarations)
         {
-            builder.AppendLine(type.Declaration);
+            builder.AppendLine(type);
         }
 
         builder.AppendLine("{");
 
+        var genericConstructorFunctionsBuilder = new StringBuilder();
+
+        genericConstructorFunctionsBuilder.AppendLine($"public static class {info.Name}");
+        genericConstructorFunctionsBuilder.AppendLine("{");
+
+        var unionTypesBuilder = new StringBuilder();
         foreach (var unionCase in info.Cases)
         {
             var paramsBuilder = new StringBuilder();
             var paramNamesBuilder = new StringBuilder();
-            builder.Append($"    private sealed record {unionCase.Name}_case(");
-            switch(unionCase.Parameters)
+            unionTypesBuilder.Append($"file sealed record {unionCase.CaseClassNameWithGenericArguments}(");
+            switch (unionCase.Parameters)
             {
                 case { Length: 0 }:
                     paramsBuilder.Append(")");
@@ -138,11 +145,11 @@ public class NewDiscriminatedUnionGenerator : IIncrementalGenerator
                     paramNamesBuilder.Append($"{unionCase.Parameters[0].Name})");
                     break;
                 default:
-                    for(var i = 0; i < unionCase.Parameters.Length; i++)
+                    for (var i = 0; i < unionCase.Parameters.Length; i++)
                     {
                         paramsBuilder.AppendLine();
                         paramsBuilder.Append($"        {unionCase.Parameters[i].Type} {unionCase.Parameters[i].Name}");
-        
+
                         paramNamesBuilder.AppendLine();
                         paramNamesBuilder.Append($"        {unionCase.Parameters[i].Name}");
 
@@ -160,13 +167,21 @@ public class NewDiscriminatedUnionGenerator : IIncrementalGenerator
                     break;
             }
             var parameters = paramsBuilder.ToString();
-            builder.Append(parameters);
-            builder.AppendLine($" : {info.NameWithParameters};");
-            builder.AppendLine($$"""
-                    public static partial {{info.NameWithParameters}} {{unionCase.Name}}({{parameters}} =>
-                        new {{unionCase.Name}}_case({{paramNamesBuilder}};
-                """);
+            var parameterNames = paramNamesBuilder.ToString();
+            unionTypesBuilder.Append(parameters);
+            unionTypesBuilder.AppendLine($" : {info.NameWithParameters};");
+
+            var constructorFunctionStart = $"{info.NameWithParameters} {unionCase.Name}";
+            var constructorFunctionBody = $"        new {unionCase.CaseClassNameWithGenericArguments}({parameterNames};";
+            builder.AppendLine($"    public static partial {constructorFunctionStart}({parameters} =>");
+            builder.AppendLine(constructorFunctionBody);
+
+            genericConstructorFunctionsBuilder.Append($"    public static {constructorFunctionStart}<");
+            genericConstructorFunctionsBuilder.Join(", ", info.GenericTypeArguments);
+            genericConstructorFunctionsBuilder.AppendLine($">({parameters} =>");
+            genericConstructorFunctionsBuilder.AppendLine(constructorFunctionBody);
         }
+        genericConstructorFunctionsBuilder.AppendLine("}");
 
         builder.AppendLine($"    public TResult Match<TResult>(");
         builder.Join(',' + Environment.NewLine, info.Cases, (unionCase, b) =>
@@ -179,9 +194,9 @@ public class NewDiscriminatedUnionGenerator : IIncrementalGenerator
         builder.AppendLine(") => this switch");
         builder.AppendLine("    {");
 
-        foreach(var unionCase in info.Cases)
+        foreach (var unionCase in info.Cases)
         {
-            builder.Append($"        {unionCase.Name}_case c => {unionCase.NameAsArgument}(");
+            builder.Append($"        {unionCase.CaseClassNameWithGenericArguments} c => {unionCase.NameAsArgument}(");
             builder.Join(", ", unionCase.Parameters.Select(p => $"c.{p.Name}"));
             builder.AppendLine("), ");
         }
@@ -190,6 +205,14 @@ public class NewDiscriminatedUnionGenerator : IIncrementalGenerator
         builder.AppendLine("    };");
 
         builder.AppendLine("}");
+
+        builder.Append(unionTypesBuilder.ToString());
+
+        if (info.GenericTypeArguments.Length > 0)
+        {
+            builder.Append(genericConstructorFunctionsBuilder.ToString());
+        }
+
         return builder.ToString();
     }
 
@@ -207,7 +230,7 @@ public class NewDiscriminatedUnionGenerator : IIncrementalGenerator
     }
 
 
-    private static ImmutableArray<UnionCaseInfo> GetCasesInfo(ITypeSymbol typeSymbol)
+    private static ImmutableArray<UnionCaseInfo> GetCasesInfo(ITypeSymbol typeSymbol, ImmutableArray<string> genericArguments)
     {
         var members = typeSymbol.GetMembers();
         if (members.IsEmpty)
@@ -224,7 +247,7 @@ public class NewDiscriminatedUnionGenerator : IIncrementalGenerator
                 continue;
             }
 
-            var caseInfo = CreateUnionCaseInfo(method);
+            var caseInfo = CreateUnionCaseInfo(method, genericArguments);
             builder.Add(caseInfo);
         }
 
@@ -253,15 +276,25 @@ public class NewDiscriminatedUnionGenerator : IIncrementalGenerator
     }
 
 
-    private static UnionCaseInfo CreateUnionCaseInfo(IMethodSymbol method)
+    private static UnionCaseInfo CreateUnionCaseInfo(IMethodSymbol method, ImmutableArray<string> genericArguments)
     {
         var nameAsArgument = char.IsUpper(method.Name[0])
             ? char.ToLower(method.Name[0]) + method.Name.Substring(1)
             : '_' + method.Name;
 
+        var classCaseNameWithGenericArguments = new StringBuilder();
+        classCaseNameWithGenericArguments.Append(method.Name);
+        if (genericArguments.Length > 0)
+        {
+            classCaseNameWithGenericArguments.Append("<");
+            classCaseNameWithGenericArguments.Join(", ", genericArguments);
+            classCaseNameWithGenericArguments.Append(">");
+        }
+
         return new UnionCaseInfo(
             method.Name,
             nameAsArgument,
+            classCaseNameWithGenericArguments.ToString(),
             method.ReturnType.ToDisplayString(),
             GetUnionParametersInfo(method.Parameters)
         );
@@ -283,11 +316,12 @@ public class NewDiscriminatedUnionGenerator : IIncrementalGenerator
     }
 
 
-    private static (ImmutableArray<NamespaceDeclarationInfo>, ImmutableArray<TypeDeclarationInfo>)
+    private static (ImmutableArray<NamespaceDeclarationInfo>, ImmutableArray<string>, ImmutableArray<string>)
         GetDeclarationInfo(SyntaxNode targetNode)
     {
         var namespaceDeclarations = ImmutableArray.CreateBuilder<NamespaceDeclarationInfo>();
-        var typeDeclarations = ImmutableArray.CreateBuilder<TypeDeclarationInfo>();
+        var typeDeclarations = ImmutableArray.CreateBuilder<string>();
+        var genericTypeArguments = ImmutableArray.CreateBuilder<string>();
 
         foreach (var node in targetNode.AncestorsAndSelf())
         {
@@ -313,9 +347,10 @@ public class NewDiscriminatedUnionGenerator : IIncrementalGenerator
                     break;
                 default:
                 {
-                    if (TypeDeclarationSyntaxUtil.ToString(node) is { } declaration)
+                    if (TypeDeclarationSyntaxUtil.Parse(node) is (string declaration, ImmutableArray<string> genericArguments))
                     {
-                        typeDeclarations.Add(new TypeDeclarationInfo(declaration));
+                        typeDeclarations.Add(declaration);
+                        genericTypeArguments.AddRange(genericArguments);
                     }
 
                     break;
@@ -326,7 +361,7 @@ public class NewDiscriminatedUnionGenerator : IIncrementalGenerator
         typeDeclarations.Reverse();
         namespaceDeclarations.Reverse();
 
-        return (namespaceDeclarations.ToImmutableArray(), typeDeclarations.ToImmutableArray());
+        return (namespaceDeclarations.ToImmutableArray(), typeDeclarations.ToImmutableArray(), genericTypeArguments.ToImmutableArray());
     }
 
 
@@ -362,10 +397,10 @@ public class NewDiscriminatedUnionGenerator : IIncrementalGenerator
 
 internal static class Extensions
 {
-    public static void Join(this StringBuilder builder, string seperator, IEnumerable<string> strings) =>
+    public static StringBuilder Join(this StringBuilder builder, string seperator, IEnumerable<string> strings) =>
         builder.Join(seperator, strings, (s, b) => b.Append(s));
 
-    public static void Join<T>(this StringBuilder builder, string seperator, IEnumerable<T> items, Action<T, StringBuilder> action)
+    public static StringBuilder Join<T>(this StringBuilder builder, string seperator, IEnumerable<T> items, Action<T, StringBuilder> action)
     {
         var enumerator = items.GetEnumerator();
         var cont = enumerator.MoveNext();
@@ -378,5 +413,6 @@ internal static class Extensions
                 builder.Append(seperator);
             }
         }
+        return builder;
     }
 }
