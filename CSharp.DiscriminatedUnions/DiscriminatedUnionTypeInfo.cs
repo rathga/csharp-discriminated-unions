@@ -1,7 +1,6 @@
 ﻿// ReSharper disable NotAccessedPositionalProperty.Global
 using System.Collections.Immutable;
 
-
 namespace CSharp.DiscriminatedUnions;
 
 
