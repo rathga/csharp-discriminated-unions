@@ -24,9 +24,9 @@ internal static class Parser
             return default;
         }
 
-        var (namespaces, types, genericArguments) = GetDeclarationInfo(typeSyntax);
+        var declarationInfo = GetDeclarationInfo(typeSyntax);
 
-        var cases = GetCasesInfo(typeSymbol, genericArguments);
+        var cases = GetCasesInfo(typeSymbol, declarationInfo.GenericTypeArguments);
         if (cases.IsEmpty)
         {
             return default;
@@ -37,12 +37,10 @@ internal static class Parser
         token.ThrowIfCancellationRequested();
 
         return new DiscriminatedUnionTypeInfo(
-            namespaces,
-            types,
-            genericArguments,
-            typeSymbol.Name,
+             typeSymbol.Name,
             GetTypeNameWithParameters(typeSymbol),
             GetUniqueTypeName(typeSymbol),
+            declarationInfo,
             cases,
             !overridesToString
         );
@@ -145,7 +143,7 @@ internal static class Parser
         return builder.MoveToImmutable();
     }
 
-    private static (ImmutableArray<NamespaceDeclarationInfo>, ImmutableArray<string>, ImmutableArray<string>)
+    private static DeclarationInfo
         GetDeclarationInfo(SyntaxNode targetNode)
     {
         var namespaceDeclarations = ImmutableArray.CreateBuilder<NamespaceDeclarationInfo>();
@@ -190,7 +188,7 @@ internal static class Parser
         typeDeclarations.Reverse();
         namespaceDeclarations.Reverse();
 
-        return (namespaceDeclarations.ToImmutableArray(), typeDeclarations.ToImmutableArray(), genericTypeArguments.ToImmutableArray());
+        return new DeclarationInfo(namespaceDeclarations.ToImmutableArray(), typeDeclarations.ToImmutableArray(), genericTypeArguments.ToImmutableArray());
     }
 
     private static string GetChildUsingStatements(SyntaxNode node)

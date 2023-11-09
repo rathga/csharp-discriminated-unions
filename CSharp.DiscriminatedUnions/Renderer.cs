@@ -11,14 +11,14 @@ internal static class Renderer
     {
         var builder = new StringBuilder();
 
-        foreach (var ns in info.NamespaceDeclarations)
+        foreach (var ns in info.DeclarationInfo.NamespaceDeclarations)
         {
             if (ns.Declaration is not null)
                 builder.AppendLine($"namespace {ns.Declaration};");
             builder.Append(ns.UsingStatements);
         }
 
-        foreach (var type in info.TypeDeclarations)
+        foreach (var type in info.DeclarationInfo.TypeDeclarations)
         {
             builder.AppendLine(type);
         }
@@ -79,7 +79,7 @@ internal static class Renderer
             builder.AppendLine(constructorFunctionBody);
 
             genericConstructorFunctionsBuilder.Append($"    public static {constructorFunctionStart}<");
-            genericConstructorFunctionsBuilder.Join(", ", info.GenericTypeArguments);
+            genericConstructorFunctionsBuilder.Join(", ", info.DeclarationInfo.GenericTypeArguments);
             genericConstructorFunctionsBuilder.AppendLine($">({parameters} =>");
             genericConstructorFunctionsBuilder.AppendLine(constructorFunctionBody);
         }
@@ -110,7 +110,7 @@ internal static class Renderer
 
         builder.Append(unionTypesBuilder.ToString());
 
-        if (info.GenericTypeArguments.Length > 0)
+        if (info.DeclarationInfo.GenericTypeArguments.Length > 0)
         {
             builder.Append(genericConstructorFunctionsBuilder.ToString());
         }

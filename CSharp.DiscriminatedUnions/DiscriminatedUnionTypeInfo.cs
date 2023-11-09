@@ -5,15 +5,16 @@ namespace CSharp.DiscriminatedUnions;
 
 
 public record NamespaceDeclarationInfo(string? Declaration, string UsingStatements);
-
-
-public record DiscriminatedUnionTypeInfo(
+public record DeclarationInfo(
     ImmutableArray<NamespaceDeclarationInfo> NamespaceDeclarations,
     ImmutableArray<string> TypeDeclarations,
-    ImmutableArray<string> GenericTypeArguments,
+    ImmutableArray<string> GenericTypeArguments);
+
+public record DiscriminatedUnionTypeInfo(
     string Name,
     string NameWithParameters,
     string UniqueName,
+    DeclarationInfo DeclarationInfo,
     ImmutableArray<UnionCaseInfo> Cases,
     bool GenerateToString);
 
