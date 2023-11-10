@@ -1,7 +1,7 @@
 ﻿using System.Collections.Generic;
-using System;
 using System.Linq;
 using System.Text;
+using System.Collections.Immutable;
 
 namespace CSharp.DiscriminatedUnions;
 
@@ -11,13 +11,34 @@ internal static class Renderer
     {
         var builder = new StringBuilder();
 
-        foreach (var ns in info.DeclarationInfo.NamespaceDeclarations)
+        RenderNamespaceAndUsingStatements(builder, info.DeclarationInfo.NamespaceDeclarations);
+
+        var caseRenderInfo = AddReusableRenderStrings(info.Cases);
+
+        RenderDiscriminatedUnionBaseType(builder, info, caseRenderInfo);
+
+        RenderUnionCaseTypes(builder, info, caseRenderInfo);
+
+        if (info.DeclarationInfo.GenericTypeArguments.Length > 0)
         {
-            if (ns.Declaration is not null)
-                builder.AppendLine($"namespace {ns.Declaration};");
-            builder.Append(ns.UsingStatements);
+            RenderGenericConstructorFunctionsClass(builder, info, caseRenderInfo);
         }
 
+        return builder.ToString();
+    }
+
+    private static void RenderNamespaceAndUsingStatements(StringBuilder builder, IEnumerable<NamespaceDeclarationInfo> namespaces)
+    { 
+        foreach (var ns in namespaces)
+        {
+            if (ns.Declaration is not null)
+                builder.Append("namespace ").Append(ns.Declaration).AppendLine(";");
+            builder.Append(ns.UsingStatements);
+        }
+    }
+
+    private static void RenderDiscriminatedUnionBaseType(StringBuilder builder, DiscriminatedUnionTypeInfo info, ImmutableArray<UnionCaseRenderInfo> cases)
+    {
         foreach (var type in info.DeclarationInfo.TypeDeclarations)
         {
             builder.AppendLine(type);
@@ -25,115 +46,111 @@ internal static class Renderer
 
         builder.AppendLine("{");
 
-        var genericConstructorFunctionsBuilder = new StringBuilder();
+        foreach(var unionCase in cases)
+        {
+            builder.AppendTab().Append("public static partial ").Append(info.NameWithParameters).Append(' ').Append(unionCase.UnionCaseInfo.Name).Append('(').Append(unionCase.ParameterListWithTypes).AppendLine(") =>");
+            builder.AppendTab().AppendTab().Append("new ").Append(unionCase.UnionCaseInfo.CaseClassNameWithGenericArguments).Append('(').Append(unionCase.ParameterListNamesOnly).AppendLine(");");
+        }
 
-        genericConstructorFunctionsBuilder.AppendLine($"public static class {info.Name}");
-        genericConstructorFunctionsBuilder.AppendLine("{");
+        builder.AppendTab().AppendLine("public TResult Match<TResult>(");
+        builder.Join(",\r\n", cases, (unionCase, b) =>
+        {
+            b.AppendTab().AppendTab().Append("        Func<");
+            b.Append(unionCase.ParameterListTypesOnly);
+            if (unionCase.ParameterListTypesOnly.Length > 0)
+            {
+                b.Append(", ");
+            }
+            b.Append("TResult> ").Append(unionCase.UnionCaseInfo.NameAsArgument);
+        });
 
-        var unionTypesBuilder = new StringBuilder();
-        foreach (var unionCase in info.Cases)
+        builder.AppendLine(") => this switch");
+        builder.AppendTab().AppendLine("{");
+
+        foreach (var unionCase in cases)
+        {
+            builder.AppendTab().AppendTab().Append(unionCase.UnionCaseInfo.CaseClassNameWithGenericArguments).Append(" c => ").Append(unionCase.UnionCaseInfo.NameAsArgument).Append('(');
+            builder.Join(", ", unionCase.UnionCaseInfo.Parameters.Select(p => $"c.{p.Name}"));
+            builder.AppendLine("), ");
+        }
+
+        builder.AppendTab().AppendTab().AppendLine("_ => throw new Exception()");
+        builder.AppendTab().AppendLine("};");
+
+        builder.AppendLine("}");
+    }
+
+    private static void RenderUnionCaseTypes(StringBuilder builder, DiscriminatedUnionTypeInfo info, ImmutableArray<UnionCaseRenderInfo> cases)
+    {
+        foreach(var unionCase in cases)
+        {
+            builder.Append("file sealed record ").Append(unionCase.UnionCaseInfo.CaseClassNameWithGenericArguments).Append('(');
+            builder.Append(unionCase.ParameterListWithTypes);
+            builder.Append(") : ").Append(info.NameWithParameters).AppendLine(";");
+        }
+    }
+
+    private static void RenderGenericConstructorFunctionsClass(StringBuilder builder, DiscriminatedUnionTypeInfo info, ImmutableArray<UnionCaseRenderInfo> cases)
+    {
+        builder.Append("public static class ").AppendLine(info.Name);
+        builder.AppendLine("{");
+
+        foreach(var unionCase in cases)
+        {
+            builder.AppendTab().Append("public static ").Append(info.NameWithParameters).Append(' ').Append(unionCase.UnionCaseInfo.Name).Append('<');
+            builder.Join(", ", info.DeclarationInfo.GenericTypeArguments);
+            builder.Append(">(").Append(unionCase.ParameterListWithTypes).AppendLine(") =>");
+            builder.AppendTab().AppendTab().Append("new ").Append(unionCase.UnionCaseInfo.CaseClassNameWithGenericArguments).Append('(').Append(unionCase.ParameterListNamesOnly).AppendLine(");");
+        }
+
+        builder.AppendLine("}");
+    }
+
+    private record UnionCaseRenderInfo(
+        UnionCaseInfo UnionCaseInfo,
+        string ParameterListWithTypes,
+        string ParameterListNamesOnly,
+        string ParameterListTypesOnly);
+
+    private static ImmutableArray<UnionCaseRenderInfo> AddReusableRenderStrings(IEnumerable<UnionCaseInfo> unionCases) =>
+        unionCases.Select(unionCase =>
         {
             var paramsBuilder = new StringBuilder();
             var paramNamesBuilder = new StringBuilder();
-            unionTypesBuilder.Append($"file sealed record {unionCase.CaseClassNameWithGenericArguments}(");
+            var paramTypesBuilder = new StringBuilder();
             switch (unionCase.Parameters)
             {
                 case { Length: 0 }:
-                    paramsBuilder.Append(")");
-                    paramNamesBuilder.Append(")");
                     break;
                 case { Length: 1 }:
-                    paramsBuilder.Append($"{unionCase.Parameters[0].Type} {unionCase.Parameters[0].Name})");
-                    paramNamesBuilder.Append($"{unionCase.Parameters[0].Name})");
+                    paramsBuilder.Append(unionCase.Parameters[0].Type).Append(' ').Append(unionCase.Parameters[0].Name);
+                    paramNamesBuilder.Append(unionCase.Parameters[0].Name);
+                    paramTypesBuilder.Append(unionCase.Parameters[0].Type);
                     break;
                 default:
                     for (var i = 0; i < unionCase.Parameters.Length; i++)
                     {
                         paramsBuilder.AppendLine();
-                        paramsBuilder.Append($"        {unionCase.Parameters[i].Type} {unionCase.Parameters[i].Name}");
+                        paramsBuilder.AppendTab().AppendTab().Append(unionCase.Parameters[i].Type).Append(' ').Append(unionCase.Parameters[i].Name);
+                        paramTypesBuilder.Append(unionCase.Parameters[i].Type);
 
                         paramNamesBuilder.AppendLine();
-                        paramNamesBuilder.Append($"        {unionCase.Parameters[i].Name}");
+                        paramNamesBuilder.AppendTab().AppendTab().Append(unionCase.Parameters[i].Name);
 
                         if (i < unionCase.Parameters.Length - 1)
                         {
                             paramsBuilder.Append(", ");
                             paramNamesBuilder.Append(", ");
-                        }
-                        else
-                        {
-                            paramsBuilder.Append(")");
-                            paramNamesBuilder.Append(")");
+                            paramTypesBuilder.Append(", ");
                         }
                     }
                     break;
             }
-            var parameters = paramsBuilder.ToString();
-            var parameterNames = paramNamesBuilder.ToString();
-            unionTypesBuilder.Append(parameters);
-            unionTypesBuilder.AppendLine($" : {info.NameWithParameters};");
+            return new UnionCaseRenderInfo(
+                unionCase,
+                paramsBuilder.ToString(),
+                paramNamesBuilder.ToString(),
+                paramTypesBuilder.ToString());
+        }).ToImmutableArray();
 
-            var constructorFunctionStart = $"{info.NameWithParameters} {unionCase.Name}";
-            var constructorFunctionBody = $"        new {unionCase.CaseClassNameWithGenericArguments}({parameterNames};";
-            builder.AppendLine($"    public static partial {constructorFunctionStart}({parameters} =>");
-            builder.AppendLine(constructorFunctionBody);
-
-            genericConstructorFunctionsBuilder.Append($"    public static {constructorFunctionStart}<");
-            genericConstructorFunctionsBuilder.Join(", ", info.DeclarationInfo.GenericTypeArguments);
-            genericConstructorFunctionsBuilder.AppendLine($">({parameters} =>");
-            genericConstructorFunctionsBuilder.AppendLine(constructorFunctionBody);
-        }
-        genericConstructorFunctionsBuilder.AppendLine("}");
-
-        builder.AppendLine($"    public TResult Match<TResult>(");
-        builder.Join(",\n", info.Cases, (unionCase, b) =>
-        {
-            b.Append("        Func<");
-            b.Join("", unionCase.Parameters.Select(p => $"{p.Type}, "));
-            b.Append($"TResult> {unionCase.NameAsArgument}");
-        });
-
-        builder.AppendLine(") => this switch");
-        builder.AppendLine("    {");
-
-        foreach (var unionCase in info.Cases)
-        {
-            builder.Append($"        {unionCase.CaseClassNameWithGenericArguments} c => {unionCase.NameAsArgument}(");
-            builder.Join(", ", unionCase.Parameters.Select(p => $"c.{p.Name}"));
-            builder.AppendLine("), ");
-        }
-
-        builder.AppendLine($"        _ => throw new Exception()");
-        builder.AppendLine("    };");
-
-        builder.AppendLine("}");
-
-        builder.Append(unionTypesBuilder.ToString());
-
-        if (info.DeclarationInfo.GenericTypeArguments.Length > 0)
-        {
-            builder.Append(genericConstructorFunctionsBuilder.ToString());
-        }
-
-        return builder.ToString();
-    }
-
-    public static StringBuilder Join(this StringBuilder builder, string seperator, IEnumerable<string> strings) =>
-    builder.Join(seperator, strings, (s, b) => b.Append(s));
-
-    public static StringBuilder Join<T>(this StringBuilder builder, string seperator, IEnumerable<T> items, Action<T, StringBuilder> action)
-    {
-        var enumerator = items.GetEnumerator();
-        var cont = enumerator.MoveNext();
-        while (cont)
-        {
-            action(enumerator.Current, builder);
-            cont = enumerator.MoveNext();
-            if (cont)
-            {
-                builder.Append(seperator);
-            }
-        }
-        return builder;
-    }
 }
