@@ -2,6 +2,7 @@
 using System.Linq;
 using System.Text;
 using System.Collections.Immutable;
+using System.Reflection.Metadata;
 
 namespace CSharp.DiscriminatedUnions;
 
@@ -17,7 +18,10 @@ internal static class Renderer
 
         RenderDiscriminatedUnionBaseType(builder, info, caseRenderInfo);
 
-        RenderUnionCaseTypes(builder, info, caseRenderInfo);
+        if (!info.DeclarationInfo.IsStruct)
+        {
+            RenderUnionCaseTypes(builder, info, caseRenderInfo);
+        }
 
         if (info.DeclarationInfo.GenericTypeArguments.Length > 0)
         {
@@ -46,24 +50,96 @@ internal static class Renderer
 
         builder.AppendLine("{");
 
-        foreach(var unionCase in cases)
+        if (info.DeclarationInfo.IsStruct)
+        {
+            RenderStructTypeBody(builder, info, cases);
+        }
+        else
+        {
+            RenderClassTypeBody(builder, info, cases);
+        }
+
+        builder.AppendLine("}");
+    }
+
+    private static void RenderStructTypeBody(StringBuilder builder, DiscriminatedUnionTypeInfo info, ImmutableArray<UnionCaseRenderInfo> cases)
+    {
+        string TypeToFieldName(string typeName) =>
+            char.IsUpper(typeName[0])
+                ? char.ToLower(typeName[0]) + typeName.Substring(1)
+                : typeName;
+
+        var paramFieldMap = cases.Select(c => new
+        {
+            Case = c,
+            ParameterFields = c.UnionCaseInfo.Parameters
+                .GroupBy(p => p.Type)
+                .SelectMany(typeGroup => typeGroup.Select((p, i) => new { Parameter = p, FieldType = typeGroup.Key, FieldName = TypeToFieldName(typeGroup.Key) + i }))
+                .ToImmutableArray()
+        }).ToImmutableArray();
+
+
+        builder.AppendTab().AppendLine("private readonly int _unionCase;");
+        var paramFields = paramFieldMap.SelectMany(mapping => mapping.ParameterFields.Select(p => (p.FieldType, p.FieldName))).Distinct().ToImmutableArray();
+        foreach (var (fieldType, fieldName) in paramFields)
+        {
+            builder.AppendTab().Append("private readonly ").Append(fieldType).Append(" _").Append(fieldName).Append(';').AppendLine();
+        }
+
+        builder.AppendTab().Append("private ").Append(info.Name).Append("(int unionCase");
+        if (!paramFields.IsEmpty)
+        {
+            builder.Append(", ");
+        }
+        builder.Join(", ", paramFields.Select(pf => $"{pf.FieldType} {pf.FieldName}"));
+        builder.Append(')').AppendLine();
+        builder.AppendTab().Append('{').AppendLine();
+        builder.AppendTab().AppendTab().AppendLine("_unionCase = unionCase;");
+        foreach (var fieldName in paramFields.Select(pf => pf.FieldName))
+        {
+            builder.AppendTab().AppendTab().Append('_').Append(fieldName).Append(" = ").Append(fieldName).Append(';').AppendLine();
+        }
+        builder.AppendTab().Append('}').AppendLine();
+
+        foreach (var (unionCase, i) in paramFieldMap.Select((p, i) => (p, i)))
+        {
+            builder.AppendTab().Append("public static partial ").Append(info.NameWithParameters).Append(' ').Append(unionCase.Case.UnionCaseInfo.Name).Append('(').Append(unionCase.Case.ParameterListWithTypes).Append(") => ").AppendLine();
+            builder.AppendTab().AppendTab().Append("new(").Append(i);
+            if (!paramFields.IsEmpty)
+            {
+                builder.Append(", ");
+            }
+            builder.Join(
+                ", ",
+                paramFields
+                    .Select(pf => pf.FieldName)
+                    .Select(fieldName => unionCase.ParameterFields.FirstOrDefault(pf => pf.FieldName == fieldName)?.Parameter.Name ?? "default"));
+            builder.Append(");").AppendLine();
+        }
+
+        RenderStartOfMatchFunction(builder, cases);
+        builder.AppendLine(") => _unionCase switch");
+        builder.AppendTab().AppendLine("{");
+
+        foreach (var (unionCase, i) in paramFieldMap.Select((c, i) => (c, i)))
+        {
+            builder.AppendTab().AppendTab().Append(i).Append(" => ").Append(unionCase.Case.UnionCaseInfo.NameAsArgument).Append('(');
+            builder.Join(", ", unionCase.ParameterFields.Select(p => p.FieldName), (fn, builder) => builder.Append('_').Append(fn));
+            builder.AppendLine("), ");
+        }
+
+        RenderEndOfMatchFunction(builder);
+    }
+
+    private static void RenderClassTypeBody(StringBuilder builder, DiscriminatedUnionTypeInfo info, ImmutableArray<UnionCaseRenderInfo> cases)
+    {
+        foreach (var unionCase in cases)
         {
             builder.AppendTab().Append("public static partial ").Append(info.NameWithParameters).Append(' ').Append(unionCase.UnionCaseInfo.Name).Append('(').Append(unionCase.ParameterListWithTypes).AppendLine(") =>");
             builder.AppendTab().AppendTab().Append("new ").Append(unionCase.UnionCaseInfo.CaseClassNameWithGenericArguments).Append('(').Append(unionCase.ParameterListNamesOnly).AppendLine(");");
         }
 
-        builder.AppendTab().AppendLine("public TResult Match<TResult>(");
-        builder.Join(",\r\n", cases, (unionCase, b) =>
-        {
-            b.AppendTab().AppendTab().Append("        Func<");
-            b.Append(unionCase.ParameterListTypesOnly);
-            if (unionCase.ParameterListTypesOnly.Length > 0)
-            {
-                b.Append(", ");
-            }
-            b.Append("TResult> ").Append(unionCase.UnionCaseInfo.NameAsArgument);
-        });
-
+        RenderStartOfMatchFunction(builder, cases);
         builder.AppendLine(") => this switch");
         builder.AppendTab().AppendLine("{");
 
@@ -74,10 +150,27 @@ internal static class Renderer
             builder.AppendLine("), ");
         }
 
+        RenderEndOfMatchFunction(builder);
+    }
+
+    private static void RenderStartOfMatchFunction(StringBuilder builder, ImmutableArray<UnionCaseRenderInfo> cases)
+    {
+        builder.AppendTab().AppendLine("public TMATCHT Match<TMATCHT>(");
+        builder.Join(",\r\n", cases, (unionCase, b) =>
+        {
+            b.AppendTab().AppendTab().Append("        Func<");
+            b.Append(unionCase.ParameterListTypesOnly);
+            if (unionCase.ParameterListTypesOnly.Length > 0)
+            {
+                b.Append(", ");
+            }
+            b.Append("TMATCHT> ").Append(unionCase.UnionCaseInfo.NameAsArgument);
+        });
+    }
+    private static void RenderEndOfMatchFunction(StringBuilder builder)
+    {
         builder.AppendTab().AppendTab().AppendLine("_ => throw new Exception()");
         builder.AppendTab().AppendLine("};");
-
-        builder.AppendLine("}");
     }
 
     private static void RenderUnionCaseTypes(StringBuilder builder, DiscriminatedUnionTypeInfo info, ImmutableArray<UnionCaseRenderInfo> cases)
@@ -100,7 +193,7 @@ internal static class Renderer
             builder.AppendTab().Append("public static ").Append(info.NameWithParameters).Append(' ').Append(unionCase.UnionCaseInfo.Name).Append('<');
             builder.Join(", ", info.DeclarationInfo.GenericTypeArguments);
             builder.Append(">(").Append(unionCase.ParameterListWithTypes).AppendLine(") =>");
-            builder.AppendTab().AppendTab().Append("new ").Append(unionCase.UnionCaseInfo.CaseClassNameWithGenericArguments).Append('(').Append(unionCase.ParameterListNamesOnly).AppendLine(");");
+            builder.AppendTab().AppendTab().Append(info.NameWithParameters).Append('.').Append(unionCase.UnionCaseInfo.Name).Append('(').Append(unionCase.ParameterListNamesOnly).AppendLine(");");
         }
 
         builder.AppendLine("}");

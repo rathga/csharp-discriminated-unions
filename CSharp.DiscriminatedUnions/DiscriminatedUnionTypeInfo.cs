@@ -8,7 +8,8 @@ public record NamespaceDeclarationInfo(string? Declaration, string UsingStatemen
 public record DeclarationInfo(
     ImmutableArray<NamespaceDeclarationInfo> NamespaceDeclarations,
     ImmutableArray<string> TypeDeclarations,
-    ImmutableArray<string> GenericTypeArguments);
+    ImmutableArray<string> GenericTypeArguments,
+    bool IsStruct);
 
 public record DiscriminatedUnionTypeInfo(
     string Name,

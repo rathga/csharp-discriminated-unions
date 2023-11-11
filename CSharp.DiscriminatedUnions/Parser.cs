@@ -149,6 +149,7 @@ internal static class Parser
         var namespaceDeclarations = ImmutableArray.CreateBuilder<NamespaceDeclarationInfo>();
         var typeDeclarations = ImmutableArray.CreateBuilder<string>();
         var genericTypeArguments = ImmutableArray.CreateBuilder<string>();
+        var isStruct = false;
 
         foreach (var node in targetNode.AncestorsAndSelf())
         {
@@ -178,6 +179,7 @@ internal static class Parser
                         {
                             typeDeclarations.Add(declaration);
                             genericTypeArguments.AddRange(genericArguments);
+                            isStruct = node is StructDeclarationSyntax;
                         }
 
                         break;
@@ -188,7 +190,7 @@ internal static class Parser
         typeDeclarations.Reverse();
         namespaceDeclarations.Reverse();
 
-        return new DeclarationInfo(namespaceDeclarations.ToImmutableArray(), typeDeclarations.ToImmutableArray(), genericTypeArguments.ToImmutableArray());
+        return new DeclarationInfo(namespaceDeclarations.ToImmutableArray(), typeDeclarations.ToImmutableArray(), genericTypeArguments.ToImmutableArray(), isStruct);
     }
 
     private static string GetChildUsingStatements(SyntaxNode node)
