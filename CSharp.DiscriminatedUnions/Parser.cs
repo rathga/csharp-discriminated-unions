@@ -135,7 +135,7 @@ internal static class Parser
 
         foreach (var parameter in parameters)
         {
-            var type = parameter.Type.ToDisplayString();
+            var type = parameter.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
             var name = parameter.Name;
             builder.Add(new UnionCaseParameterInfo(type, name));
         }

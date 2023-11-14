@@ -1,3 +1,5 @@
+using Conflicts;
+
 namespace CSharp.DiscriminatedUnions.Tests;
 
 [DiscriminatedUnion]
@@ -30,6 +32,12 @@ public readonly partial struct ShapeStruct
     public static partial ShapeStruct Rectangle(int length, int width);
     public static partial ShapeStruct Triangle(int a, int b, int c);
     public static partial ShapeStruct AlternativeTriangle(int baseWidth, int height, double apexAngle);
+}
+
+[DiscriminatedUnion]
+public abstract partial record TypeConflicts
+{
+    public static partial TypeConflicts Replicate(Error err);
 }
 
 public class Tests
@@ -97,4 +105,6 @@ public class Tests
         Assert.Equal("1", match(success));
         Assert.Equal("error", match(failure));
     }
+
+
 }
