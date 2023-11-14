@@ -25,5 +25,12 @@ internal static class Extensions
         return builder;
     }
 
-    public static StringBuilder AppendTab(this StringBuilder builder) => builder.Append("    ");
+    public static StringBuilder AppendTab(this StringBuilder builder, int numberOfTabs = 1)
+    {
+        for (var i = 0; i < numberOfTabs; i++)
+        {
+            builder.Append("    ");
+        }
+        return builder;
+    }
 }

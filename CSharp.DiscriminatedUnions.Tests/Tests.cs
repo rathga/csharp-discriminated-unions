@@ -41,7 +41,9 @@ public class Tests
         var square = Shape.Square(1);
         var rectangle = Shape.Rectangle(2, 3);
         Func<Shape, string> match = s => s.Match(
-            () => "dot", length => $"square {length}", (length, width) => $"rectangle {length} {width}");
+            dot => "dot", 
+            square => $"square {square.Length}", 
+            rectangle => $"rectangle {rectangle.Length} {rectangle.Width}");
 
         Assert.Equal("dot", match(dot));
         Assert.Equal("square 1", match(square));
@@ -54,8 +56,8 @@ public class Tests
         var success = Result.Success(1);
         var failure = Result.Failure<int>("error");
         Func<Result<int>, string> match = r => r.Match(
-            i => i.ToString(),
-            e => e);
+            success => success.Value.ToString(),
+            failure => failure.Error);
 
         Assert.Equal("1", match(success));
         Assert.Equal("error", match(failure));
@@ -95,5 +97,4 @@ public class Tests
         Assert.Equal("1", match(success));
         Assert.Equal("error", match(failure));
     }
-
 }
