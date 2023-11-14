@@ -17,11 +17,6 @@ internal static class Renderer
 
         RenderDiscriminatedUnionBaseType(builder, info, caseRenderInfo);
 
-        if (!info.DeclarationInfo.IsStruct)
-        {
-            RenderUnionCaseTypes(builder, info, caseRenderInfo);
-        }
-
         if (info.DeclarationInfo.GenericTypeArguments.Length > 0)
         {
             RenderGenericConstructorFunctionsClass(builder, info, caseRenderInfo);
@@ -135,7 +130,7 @@ internal static class Renderer
         foreach (var unionCase in cases)
         {
             builder.AppendTab().Append("public static partial ").Append(info.NameWithParameters).Append(' ').Append(unionCase.Name).Append('(').Append(unionCase.ParameterListWithTypes).AppendLine(") =>");
-            builder.AppendTab(2).Append("new ").Append(unionCase.CaseClassNameWithGenericArguments).Append('(').Append(unionCase.ParameterListNamesOnly).AppendLine(");");
+            builder.AppendTab(2).Append("new Implementations.").Append(unionCase.Name).Append('(').Append(unionCase.ParameterListNamesOnly).AppendLine(");");
         }
 
         builder.AppendTab().AppendLine("public static class Cases");
@@ -151,6 +146,8 @@ internal static class Renderer
             builder.AppendTab(2).Append('}').AppendLine();
         }
         builder.AppendTab().Append('}').AppendLine();
+
+        RenderUnionCaseTypes(builder, info, cases);
 
         builder.AppendTab().AppendLine("public TReturn Match<TReturn>(");
         builder.Join(
@@ -184,18 +181,21 @@ internal static class Renderer
     }
     private static void RenderEndOfMatchFunction(StringBuilder builder)
     {
-        builder.AppendTab().AppendTab().AppendLine("_ => throw new Exception()");
+        builder.AppendTab(2).AppendLine("_ => throw new Exception()");
         builder.AppendTab().AppendLine("};");
     }
 
     private static void RenderUnionCaseTypes(StringBuilder builder, DiscriminatedUnionTypeInfo info, ImmutableArray<UnionCaseRenderInfo> cases)
     {
+        builder.AppendTab().AppendLine("private static class Implementations");
+        builder.AppendTab().Append('{').AppendLine();
         foreach(var unionCase in cases)
         {
-            builder.Append("file sealed record ").Append(unionCase.CaseClassNameWithGenericArguments).Append('(');
+            builder.AppendTab(2).Append("public sealed record ").Append(unionCase.Name).Append('(');
             builder.Join(", ", unionCase.Parameters, (p, b) => b.Append(p.Type).Append(' ').Append(p.NameAsMember));
             builder.Append(") : ").Append(info.NameWithParameters).Append(", ").Append(info.NameWithParameters).Append(".Cases.").Append(unionCase.Name).AppendLine(";");
         }
+        builder.AppendTab().Append('}').AppendLine();
     }
 
     private static void RenderGenericConstructorFunctionsClass(StringBuilder builder, DiscriminatedUnionTypeInfo info, ImmutableArray<UnionCaseRenderInfo> cases)
