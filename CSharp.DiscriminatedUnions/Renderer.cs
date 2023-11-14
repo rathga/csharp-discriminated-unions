@@ -37,12 +37,13 @@ internal static class Renderer
 
     private static void RenderDiscriminatedUnionBaseType(StringBuilder builder, DiscriminatedUnionTypeInfo info, ImmutableArray<UnionCaseRenderInfo> cases)
     {
+        int nesting = 0;
         foreach (var type in info.DeclarationInfo.TypeDeclarations)
         {
             builder.AppendLine(type);
+            builder.AppendLine("{");
+            nesting++;
         }
-
-        builder.AppendLine("{");
 
         if (info.DeclarationInfo.IsStruct)
         {
@@ -53,7 +54,11 @@ internal static class Renderer
             RenderClassTypeBody(builder, info, cases);
         }
 
-        builder.AppendLine("}");
+        while (nesting > 0)
+        {
+            builder.AppendLine("}");
+            nesting--;
+        }
     }
 
     private static void RenderStructTypeBody(StringBuilder builder, DiscriminatedUnionTypeInfo info, ImmutableArray<UnionCaseRenderInfo> cases)

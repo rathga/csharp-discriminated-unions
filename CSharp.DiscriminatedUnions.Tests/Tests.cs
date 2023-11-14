@@ -40,6 +40,15 @@ public abstract partial record TypeConflicts
     public static partial TypeConflicts Replicate(Error err);
 }
 
+public partial class Parent
+{
+    [DiscriminatedUnion]
+    public abstract partial record Child
+    {
+        public static partial Child Orphan();
+    }
+}
+
 public class Tests
 {
     [Fact]
