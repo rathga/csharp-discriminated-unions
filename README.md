@@ -1,61 +1,37 @@
-# CSharp.DiscriminatedUnions
+# About
 
-A [discriminated union](https://en.wikipedia.org/wiki/Tagged_union) source generator for C#.
+Rathga.CSharp.DiscriminatedUnions is a [discriminated union](https://en.wikipedia.org/wiki/Tagged_union) source generator for C#, forked from the stellar work by [dartk/CSharp.DiscriminatedUnions](https://github.com/dartk/csharp-discriminated-unions).
 
 Discriminated unions represent values that can be one of a number of cases. Each case has a unique name and can store values of different types, as opposed to the standard `enum` type, that can only be of an integral numeric type.
 
-- [Installation](#installation)
-- [Declaring a Discriminated Union](#declaring-a-discriminated-union)
-- [Creating instances](#creating-instances)
-- [Case matching](#case-matching)
-  - [`Switch` methods](#switch-methods)
-  - [`switch` statement or expression](#switch-statement-or-expression)
-- [More examples](#more-examples)
+The intention of this project is to create a discriminated union that feels close to FSharp discriminated unions, and opinionatedly differs from other discriminated union libraries (e.g. [OneOf](https://github.com/mcintyre321/OneOf)).
 
-
-## Installation
-
-```
-dotnet add package Dartk.CSharp.DiscriminatedUnions --version 0.1.0
-```
+## Installation - TO BE UPDATED, private package only right now
 
 Generated code does not depend on the package at runtime. Therefore, it is safe to set the option `PrivateAssets="all"` to avoid propagating the dependency on the package:
 
 ```xml
 <ItemGroup>
-    <PackageReference Include="Dartk.CSharp.DiscriminatedUnions" Version="0.1.0" PrivateAssets="all" />
+    <PackageReference Include="Dartk.CSharp.DiscriminatedUnions" Version="0.1.1" PrivateAssets="all" />
 </ItemGroup>
 ```
 
+## How to Use
 
-## Declaring a Discriminated Union
-
-*Discriminated unions* are declared as partial types with a `[DiscriminatedUnion]` attribute. `struct`, `class` and `record` types are supported.
-
-*Cases* are defined as a static partial methods for which the following is true:
-* Return type is the union type itself.
-* Method has a `[Case]` attribute.
+#### Declaring a Discriminated Union
 
 ```c#
 [DiscriminatedUnion]
-public partial class Shape
-{
-    [Case] public static partial Shape Dot();
-    [Case] public static partial Shape Circle(double radius);
-    [Case] public static partial Shape Rectangle(double width, double length);
+public abstract partial record Shape
+{  
+    public static partial Shape Dot();
+    public static partial Shape Square(int length);
+    public static partial Shape Rectangle(int length, int width);
 }
 ```
 
-The code above declares a discriminated union `Shape` with three cases:
 
-1) `Dot` doesn't have any data
-2) `Circle` has `radius`
-3) `Rectangle` has `width` and `length`
-
-
-## Creating instances
-
-To create an instance of the discriminated union one of the case defining methods are used:
+#### Creating an Instance
 
 ```c#
 var dot = Shape.Dot();
@@ -63,241 +39,69 @@ var circle = Shape.Circle(5.0);
 var rectangle = Shape.Rectangle(2.0, 4.0);
 ```
 
-The generator creates bodies for the case methods that call a generated private constructor.
 
-
-## Case matching
-
-### `Switch` methods
-
-Exhaustive case matching can be performed using `Switch` methods:
+#### Exhaustive Case Matching
 
 ```c#
-double Area(Shape shape) => shape.Switch(
-    Dot: () => 0.0,
-    Circle: radius => Math.PI * radius * radius,
-    Rectangle: (width, length) => width * length
+bool ToString(Shape shape) => shape.Match(
+    dot => "dot", 
+    square => $"square {square.Length}", 
+    rectangle => $"rectangle {rectangle.Length} {rectangle.Width}");
 );
 ```
 
+#### Strongly typed cases
+
 ```c#
-bool IsCircle(Shape shape) => shape.Switch(
-    Circle: _ => true,
-    Default: _ => false
-);
+using static Shape.Cases;
+
+// requires Rectangle NOT Shape
+Shape RotateRectangle(Rectangle rectangle) => Shape.Rectangle(rectangle.Width, rectangle.Length);
+
+Shape Rotate(Shape shape) => shape.Match(
+    dot => Shape.Dot(),
+    square => Shape.Square(square.Length),
+    rectangle => RotateRectangle(rectangle));
 ```
 
-There are four overloads of `Switch`: two that return a value and another two that return `void`.
-In each pair, one method requires a handler function for every possible case and the
-other requires a default handler, while all the other handlers are optional.
-
-<details>
-    <summary>Generated <code>Switch</code> methods</summary>
+#### Non-Exhaustive C# style Pattern Matching
 
 ```c#
-// Returns value
-partial class Shape
+using static Shape.Cases;
+
+bool IsSquare(Shape shape) => shape switch
 {
-    public TResult Switch<TResult>(
-        Func<TResult> Dot,
-        Func<double, TResult> Circle,
-        Func<double, double, TResult> Rectangle);
-
-    public TResult Switch<TResult>(
-        Func<Shape, TResult> Default,
-        Func<TResult>? Dot = null,
-        Func<double, TResult>? Circle = null,
-        Func<double, double, TResult>? Rectangle = null);
-}
-        
-        
-// Returns void
-partial class Shape
-{
-    public void Switch(
-        Action Dot,
-        Action<double> Circle,
-        Action<double, double> Rectangle);
-
-    public void Switch(
-        Action<Shape> Default,
-        Action? Dot = null,
-        Action<double>? Circle = null,
-        Action<double, double>? Rectangle = null);
+    Square => true;
+    _ => false;
 }
 ```
 
-</details>
-
-These overloads of `Switch` achieve exhaustive case matching, meaning that you will either have to
-provide handlers for all of the possible cases or provide a default handler. And if you add another
-case to the union later on, then all the invocations that don't provide a default handler will give
-an error on compilation.
-
-
-### `switch` statement or expression
-
-Case matching can also be done using the standard `switch` statement or expression:
+### Structs for small, allocation free unions (good for monads)
 
 ```c#
-double Area(Shape shape)
+[DiscriminatedUnion]
+public readonly partial struct Result<T>
 {
-    switch (shape.Case)
-    {
-        case Shape.Enum.Dot:
-            return 0.0;
-            
-        case Shape.Enum.Circle:
-            var radius = shape.GetCircle();
-            return Math.PI * radius;
-            
-        case Shape.Enum.Rectangle:
-            var (width, length) = shape.GetRectangle();
-            return width * length;
-            
-        default:
-            throw new ArgumentOutOfRangeException();
-    }
+    public static partial Result<T> Success(T value);
+    public static partial Result<T> Failure(string error);
 }
-```
 
+Result<decimal> Divide(int x, int y) =>
+    y == 0 ? Result.Failure("Divide by zero") : Result.Success(x / y);
 
-## Generated code
-
-To save the generated code into a file during the build process, set the project properties
-`EmitCompilerGeneratedFiles` and `CompilerGeneratedFilesOutputPath` in the `.csproj` file:
-
-```xml
-<PropertyGroup>
-    <EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>
-    <!--Files will be saved in 'obj\GeneratedFiles\'-->
-    <CompilerGeneratedFilesOutputPath>$(BaseIntermediateOutputPath)\GeneratedFiles </CompilerGeneratedFilesOutputPath>
-</PropertyGroup>
-```
-
-<details>
-    <summary>Full generated code</summary>
-
-```c#
-#nullable enable
-
-public partial class Shape {
-
-    public enum Enum {
-        Dot,
-        Circle,
-        Rectangle,
-    }
-        
-    private Shape(Enum Case, double Circle_radius = default!, double Rectangle_width = default!, double Rectangle_length = default!) {
-        this.Case = Case;
-        this.Circle_radius = Circle_radius;
-        this.Rectangle_width = Rectangle_width;
-        this.Rectangle_length = Rectangle_length;
-    }
-    
-    public Enum Case { get; }
-    private readonly double Circle_radius;
-    private readonly double Rectangle_width;
-    private readonly double Rectangle_length;
-    
-    public static partial Shape Dot() {
-        return new Shape(Case: Enum.Dot);
-    }
-    
-    public bool IsDot => this.Case == Enum.Dot;
-    
-    public static partial Shape Circle(double radius) {
-        return new Shape(Circle_radius: radius, Case: Enum.Circle);
-    }
-    
-    public bool IsCircle => this.Case == Enum.Circle;
-    
-    public bool TryGetCircle(out double radius) {
-        radius = this.Circle_radius;
-        return this.IsCircle;
-    }
-    
-    public double GetCircle() {
-        if (!this.IsCircle) {
-            throw new InvalidOperationException($"Cannot get 'Circle' for '{this.Case}'.");
-        }
-        
-        return this.Circle_radius;
-    }
-    
-    public static partial Shape Rectangle(double width, double length) {
-        return new Shape(Rectangle_width: width, Rectangle_length: length, Case: Enum.Rectangle);
-    }
-    
-    public bool IsRectangle => this.Case == Enum.Rectangle;
-    
-    public bool TryGetRectangle(out double width, out double length) {
-        width = this.Rectangle_width;
-        length = this.Rectangle_length;
-        return this.IsRectangle;
-    }
-    
-    public (double width, double length) GetRectangle() {
-        if (!this.IsRectangle) {
-            throw new InvalidOperationException($"Cannot get 'Rectangle' for '{this.Case}'.");
-        }
-        
-        return (this.Rectangle_width, this.Rectangle_length);
-    }
-
-    public TResult Switch<TResult>(Func<TResult> Dot, Func<double, TResult> Circle, Func<double, double, TResult> Rectangle) {
-        switch (this.Case) {
-            case Enum.Dot: return Dot();
-            case Enum.Circle: return Circle(this.Circle_radius);
-            case Enum.Rectangle: return Rectangle(this.Rectangle_width, this.Rectangle_length);
-            default: throw new ArgumentOutOfRangeException($"Invalid union case '{this.Case}'");
-        }
-    }
-
-    public TResult Switch<TResult>(Func<Shape, TResult> Default, Func<TResult>? Dot = null, Func<double, TResult>? Circle = null, Func<double, double, TResult>? Rectangle = null) {
-        switch (this.Case) {
-            case Enum.Dot: return Dot != null ? Dot() : Default(this);
-            case Enum.Circle: return Circle != null ? Circle(this.Circle_radius) : Default(this);
-            case Enum.Rectangle: return Rectangle != null ? Rectangle(this.Rectangle_width, this.Rectangle_length) : Default(this);
-            default: throw new ArgumentOutOfRangeException($"Invalid union case '{this.Case}'");
-        }
-    }
-
-    public void Switch(Action Dot, Action<double> Circle, Action<double, double> Rectangle) {
-        switch (this.Case) {
-            case Enum.Dot: Dot(); break;
-            case Enum.Circle: Circle(this.Circle_radius); break;
-            case Enum.Rectangle: Rectangle(this.Rectangle_width, this.Rectangle_length); break;
-            default: throw new ArgumentOutOfRangeException($"Invalid union case '{this.Case}'");
-        }
-    }
-
-    public void Switch(Action<Shape> Default, Action? Dot = null, Action<double>? Circle = null, Action<double, double>? Rectangle = null) {
-        switch (this.Case) {
-            case Enum.Dot: if (Dot != null) { Dot(); } else { Default(this); } break;
-            case Enum.Circle: if (Circle != null) { Circle(this.Circle_radius); } else { Default(this); } break;
-            case Enum.Rectangle: if (Rectangle != null) { Rectangle(this.Rectangle_width, this.Rectangle_length); } else { Default(this); } break;
-            default: throw new ArgumentOutOfRangeException($"Invalid union case '{this.Case}'");
-        }
-    }
-    
-    public override string ToString() {
-        switch (this.Case) {
-            case Enum.Dot: return $"Dot()";
-            case Enum.Circle: return $"Circle({this.Circle_radius})";
-            case Enum.Rectangle: return $"Rectangle({this.Rectangle_width}, {this.Rectangle_length})";
-            default: throw new ArgumentOutOfRangeException($"Invalid union case '{this.Case}'");
-        }
-    }
+public static class ResultExtensions
+{
+    public Result<K> Bind<T, K>(this Result<T> result, Func<T, Result<K>> next) =>
+        result.Match(
+            value => next(Value),
+            error => Result.Failure(error));
 }
+
+int[] numbersToDivide = [1, 2, 3, 4, 5, 6];
+
+var result = numbersToDivide.Aggregate(Result.Success(1), (current, next) => current.Bind(c => Divide(c, next)));
+
+var description = result.Match(
+    value => $"Numbers divided in order to reach {value}"
+    error => $"There was an error: {error}");
 ```
-
-</details>
-
-
-## More examples
-
-* [Tree structures](./Docs/tree-structures.md)
-* [Option type](./Docs/option.md)
-* [Railway Oriented Programming](./Docs/railway-oriented-programming.md)
