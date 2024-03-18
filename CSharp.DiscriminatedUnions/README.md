@@ -1,12 +1,12 @@
 # About
 
-Dartk.CSharp.DiscriminatedUnions is a [discriminated union](https://en.wikipedia.org/wiki/Tagged_union) source generator for C#.
+Rathga.CSharp.DiscriminatedUnions is a [discriminated union](https://en.wikipedia.org/wiki/Tagged_union) source generator for C#, forked from the stellar work by [dartk/CSharp.DiscriminatedUnions](https://github.com/dartk/csharp-discriminated-unions).
 
 Discriminated unions represent values that can be one of a number of cases. Each case has a unique name and can store values of different types, as opposed to the standard `enum` type, that can only be of an integral numeric type.
 
-More information is available at the [dartk/CSharp.DiscriminatedUnions](https://github.com/dartk/csharp-discriminated-unions) github page.
+The intention of this project is to create a discriminated union that feels close to FSharp discriminated unions, and opinionatedly differs from other discriminated union libraries (e.g. [OneOf](https://github.com/mcintyre321/OneOf)).
 
-## Installation
+## Installation - TO BE UPDATED, private package only right now
 
 Generated code does not depend on the package at runtime. Therefore, it is safe to set the option `PrivateAssets="all"` to avoid propagating the dependency on the package:
 
@@ -22,11 +22,11 @@ Generated code does not depend on the package at runtime. Therefore, it is safe 
 
 ```c#
 [DiscriminatedUnion]
-partial class Shape
-{
-    [Case] public static partial Shape Dot();
-    [Case] public static partial Shape Circle(double radius);
-    [Case] public static partial Shape Rectangle(double width, double length);
+public abstract partial record Shape
+{  
+    public static partial Shape Dot();
+    public static partial Shape Square(int length);
+    public static partial Shape Rectangle(int length, int width);
 }
 ```
 
@@ -40,18 +40,68 @@ var rectangle = Shape.Rectangle(2.0, 4.0);
 ```
 
 
-#### Case Matching
+#### Exhaustive Case Matching
 
 ```c#
-double Area(Shape shape) => shape.Switch(
-    Dot: () => 0.0,
-    Circle: radius => Math.PI * radius * radius,
-    Rectangle: (width, length) => width * length
-);
-
-bool IsCircle(Shape shape) => shape.Switch(
-    Circle: _ => true,
-    Default: _ => false
+bool ToString(Shape shape) => shape.Match(
+    dot => "dot", 
+    square => $"square {square.Length}", 
+    rectangle => $"rectangle {rectangle.Length} {rectangle.Width}");
 );
 ```
 
+#### Strongly typed cases
+
+```c#
+using static Shape.Cases;
+
+// requires Rectangle NOT Shape
+Shape RotateRectangle(Rectangle rectangle) => Shape.Rectangle(rectangle.Width, rectangle.Length);
+
+Shape Rotate(Shape shape) => shape.Match(
+    dot => Shape.Dot(),
+    square => Shape.Square(square.Length),
+    rectangle => RotateRectangle(rectangle));
+```
+
+#### Non-Exhaustive C# style Pattern Matching
+
+```c#
+using static Shape.Cases;
+
+bool IsSquare(Shape shape) => shape switch
+{
+    Square => true;
+    _ => false;
+}
+```
+
+### Structs for small, allocation free unions (good for monads)
+
+```c#
+[DiscriminatedUnion]
+public readonly partial struct Result<T>
+{
+    public static partial Result<T> Success(T value);
+    public static partial Result<T> Failure(string error);
+}
+
+Result<decimal> Divide(int x, int y) =>
+    y == 0 ? Result.Failure("Divide by zero") : Result.Success(x / y);
+
+public static class ResultExtensions
+{
+    public Result<K> Bind<T, K>(this Result<T> result, Func<T, Result<K>> next) =>
+        result.Match(
+            value => next(Value),
+            error => Result.Failure(error));
+}
+
+int[] numbersToDivide = [1, 2, 3, 4, 5, 6];
+
+var result = numbersToDivide.Aggregate(Result.Success(1), (current, next) => current.Bind(c => Divide(c, next)));
+
+var description = result.Match(
+    value => $"Numbers divided in order to reach {value}"
+    error => $"There was an error: {error}");
+```
