@@ -35,8 +35,8 @@ public abstract partial record Shape
 
 ```c#
 var dot = Shape.Dot();
-var circle = Shape.Circle(5.0);
-var rectangle = Shape.Rectangle(2.0, 4.0);
+var circle = Shape.Circle(5);
+var rectangle = Shape.Rectangle(2, 4);
 ```
 
 
@@ -87,7 +87,7 @@ public readonly partial struct Result<T>
 }
 
 Result<decimal> Divide(int x, int y) =>
-    y == 0 ? Result.Failure("Divide by zero") : Result.Success(x / y);
+    y == 0 ? Result.Failure<decimal>("Divide by zero") : Result.Success((decimal)x / y);
 
 public static class ResultExtensions
 {
