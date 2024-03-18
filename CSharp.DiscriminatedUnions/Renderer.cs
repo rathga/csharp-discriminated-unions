@@ -38,8 +38,16 @@ internal static class Renderer
     private static void RenderDiscriminatedUnionBaseType(StringBuilder builder, DiscriminatedUnionTypeInfo info, ImmutableArray<UnionCaseRenderInfo> cases)
     {
         int nesting = 0;
-        foreach (var type in info.DeclarationInfo.TypeDeclarations)
+        foreach (var (type, i) in info.DeclarationInfo.TypeDeclarations.Select((t, i) => (t, i)))
         {
+            if (!info.DeclarationInfo.IsStruct && info.DeclarationInfo.GenericTypeArguments.Length == 0 && i == info.DeclarationInfo.TypeDeclarations.Length - 1)
+            {
+                builder.AppendLine("[System.Text.Json.Serialization.JsonPolymorphic(TypeDiscriminatorPropertyName = \"$case\")]");
+                foreach (var unionCase in cases)
+                {
+                    builder.Append("[System.Text.Json.Serialization.JsonDerivedType(typeof(Implementations.").Append(unionCase.Name).Append("), \"").Append(unionCase.Name).AppendLine("\")]");
+                }
+            }
             builder.AppendLine(type);
             builder.AppendLine("{");
             nesting++;
@@ -168,6 +176,49 @@ internal static class Renderer
         }
 
         RenderEndOfMatchFunction(builder);
+
+        builder.AppendTab().AppendLine("public static TReturn MatchName<TReturn>(");
+        builder.AppendTab(2).AppendLine("string nameToMatch,");
+        builder.Join(
+            ",\r\n",
+            cases,
+            (unionCase, b) => b.AppendTab(2).Append("Func<TReturn> ").Append(unionCase.NameAsArgument));
+        builder.AppendLine(") => nameToMatch switch");
+        builder.AppendTab().AppendLine("{");
+
+        foreach (var unionCase in cases)
+        {
+            builder.AppendTab(2).Append('"').Append(unionCase.Name).Append("\" => ").Append(unionCase.NameAsArgument).AppendLine("(),");
+        }
+
+        RenderEndOfMatchFunction(builder);
+
+        builder.AppendTab().AppendLine("public static Func<string, TReturn> MatchName<TReturn>(");
+        builder.Join(
+            ",\r\n",
+            cases,
+            (unionCase, b) => b.AppendTab(2).Append("Func<TReturn> ").Append(unionCase.NameAsArgument));
+        builder.AppendLine(") => nameToMatch =>");
+        builder.AppendTab().AppendLine("MatchName(");
+        builder.AppendTab(2).AppendLine("nameToMatch,");
+        builder.Join(
+            ",\r\n",
+            cases,
+            (unionCase, b) => b.AppendTab(2).Append(unionCase.NameAsArgument));
+        builder.AppendLine(");");
+
+        builder.AppendTab().AppendLine("public static IEnumerable<TReturn> MapNames<TReturn>(");
+        builder.Join(
+            ",\r\n",
+            cases,
+            (unionCase, b) => b.AppendTab(2).Append("Func<string, TReturn> ").Append(unionCase.NameAsArgument));
+        builder.Append(')').AppendLine();
+        builder.AppendTab().Append('{').AppendLine();
+        foreach(var unionCase in cases)
+        {
+            builder.AppendTab(2).Append("yield return ").Append(unionCase.NameAsArgument).Append("(\"").Append(unionCase.Name).AppendLine("\");");
+        }
+        builder.AppendTab().Append('}').AppendLine();
     }
 
     private static void RenderStartOfMatchFunction(StringBuilder builder, ImmutableArray<UnionCaseRenderInfo> cases)

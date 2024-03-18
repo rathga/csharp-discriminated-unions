@@ -68,6 +68,29 @@ public class Tests
     }
 
     [Fact]
+    public void MatchName()
+    {
+        var match = Shape.MatchName(
+            dot: () => "Dot",
+            square: () => "Square",
+            rectangle: () => "Rectangle");
+
+        Assert.Equal("Dot", match("Dot"));
+        Assert.Equal("Square", match("Square"));
+        Assert.Equal("Rectangle", match("Rectangle"));
+    }
+
+    [Fact]
+    public void MapNames()
+    {
+        string Map(string name) => $"{name} name";
+
+        Assert.Equal(
+            new[] { "Dot name", "Square name", "Rectangle name" },
+            Shape.MapNames(Map, Map, Map));
+    }
+
+    [Fact]
     public void MatchGeneric()
     {
         var success = Result.Success(1);
