@@ -34,9 +34,9 @@ public abstract partial record Shape
 #### Creating an Instance
 
 ```c#
-var dot = Shape.Dot();
-var circle = Shape.Circle(5);
-var rectangle = Shape.Rectangle(2, 4);
+Shape dot = Shape.Dot();
+Shape circle = Shape.Circle(5);
+Shape rectangle = Shape.Rectangle(2, 4);
 ```
 
 
@@ -50,7 +50,7 @@ bool ToString(Shape shape) => shape.Match(
 );
 ```
 
-#### Strongly typed cases
+#### Strongly typed deconstructed cases
 
 ```c#
 using static Shape.Cases;
@@ -62,6 +62,20 @@ Shape Rotate(Shape shape) => shape.Match(
     dot => Shape.Dot(),
     square => Shape.Square(square.Length),
     rectangle => RotateRectangle(rectangle));
+```
+
+#### ... but without implicit conversion or subclassing
+
+```c#
+using static Shape.Cases;
+
+// requires Rectangle NOT Shape
+Shape RotateRectangle(Rectangle rectangle) => Shape.Rectangle(rectangle.Width, rectangle.Length);
+
+Shape Rotate(Shape shape) => shape.Match(
+    dot => Shape.Dot(),
+    square => Shape.Square(square.Length),
+    rectangle => Rotate(rectangle)); // incorrect recursive call will not compile, Rectangle is a concrete case not an as-yet unmatched union
 ```
 
 #### Non-Exhaustive C# style Pattern Matching
