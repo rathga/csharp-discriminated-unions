@@ -12,7 +12,7 @@ Generated code does not depend on the package at runtime. Therefore, it is safe 
 
 ```xml
 <ItemGroup>
-    <PackageReference Include="<PackageReference Include="Dartk.CSharp.DiscriminatedUnions" Version="0.1.8" PrivateAssets="all" />" Version="0.1.1" PrivateAssets="all" />
+    <PackageReference Include="Rathga.CSharp.DiscriminatedUnions" Version="0.1.8" PrivateAssets="all" />
 </ItemGroup>
 ```
 
