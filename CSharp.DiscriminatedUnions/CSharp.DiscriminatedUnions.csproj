@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
     <PropertyGroup>
         <TargetFramework>netstandard2.0</TargetFramework>
@@ -15,7 +15,7 @@
         <Title>CSharpDiscriminatedUnions</Title>
         <Description>Discriminated union generator for C#</Description>
         <Authors>Richard Davies</Authors>
-        <Copyright>2023</Copyright>
+        <Copyright>2024</Copyright>
         <Version>0.1.8</Version>
         <RepositoryUrl>https://github.com/rathga/csharp-discriminated-unions</RepositoryUrl>
         <RepositoryType>git</RepositoryType>
@@ -23,10 +23,6 @@
         <PackageReadmeFile>README.md</PackageReadmeFile>
         <PackageTags>C# functional code generation</PackageTags>
     </PropertyGroup>
-
-    <ItemGroup>
-        <None Include="./README.md" Pack="true" PackagePath="/" />
-    </ItemGroup>
 
     <PropertyGroup>
         <IncludeBuildOutput>false</IncludeBuildOutput>
@@ -39,6 +35,13 @@
 
     <ItemGroup>
         <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.7.0" PrivateAssets="all" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <None Include="../README.md">
+        <Pack>True</Pack>
+        <PackagePath>\</PackagePath>
+      </None>
     </ItemGroup>
 
 </Project>

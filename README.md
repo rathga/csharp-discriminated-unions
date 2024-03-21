@@ -6,13 +6,13 @@ Discriminated unions represent values that can be one of a number of cases. Each
 
 The intention of this project is to create a discriminated union that feels close to FSharp discriminated unions, and opinionatedly differs from other discriminated union libraries (e.g. [OneOf](https://github.com/mcintyre321/OneOf)).
 
-## Installation - TO BE UPDATED, private package only right now
+## Installation
 
 Generated code does not depend on the package at runtime. Therefore, it is safe to set the option `PrivateAssets="all"` to avoid propagating the dependency on the package:
 
 ```xml
 <ItemGroup>
-    <PackageReference Include="Dartk.CSharp.DiscriminatedUnions" Version="0.1.1" PrivateAssets="all" />
+    <PackageReference Include="<PackageReference Include="Dartk.CSharp.DiscriminatedUnions" Version="0.1.8" PrivateAssets="all" />" Version="0.1.1" PrivateAssets="all" />
 </ItemGroup>
 ```
 
