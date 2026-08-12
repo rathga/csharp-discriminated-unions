@@ -7,6 +7,8 @@ namespace CSharp.DiscriminatedUnions;
 
 internal static class Renderer
 {
+    private const string NameToMatchParameter = "nameToMatch";
+
     public static string Render(DiscriminatedUnionTypeInfo info)
     {
         var builder = new StringBuilder();
@@ -178,12 +180,12 @@ internal static class Renderer
         RenderEndOfMatchFunction(builder);
 
         builder.AppendTab().AppendLine("public static TReturn MatchName<TReturn>(");
-        builder.AppendTab(2).AppendLine("string nameToMatch,");
+        builder.AppendTab(2).Append("string ").Append(NameToMatchParameter).AppendLine(",");
         builder.Join(
             ",\r\n",
             cases,
             (unionCase, b) => b.AppendTab(2).Append("Func<TReturn> ").Append(unionCase.NameAsArgument));
-        builder.AppendLine(") => nameToMatch switch");
+        builder.Append(") => ").Append(NameToMatchParameter).AppendLine(" switch");
         builder.AppendTab().AppendLine("{");
 
         foreach (var unionCase in cases)
@@ -191,16 +193,16 @@ internal static class Renderer
             builder.AppendTab(2).Append('"').Append(unionCase.Name).Append("\" => ").Append(unionCase.NameAsArgument).AppendLine("(),");
         }
 
-        RenderEndOfMatchFunction(builder);
+        RenderEndOfMatchNameFunction(builder, info);
 
         builder.AppendTab().AppendLine("public static Func<string, TReturn> MatchName<TReturn>(");
         builder.Join(
             ",\r\n",
             cases,
             (unionCase, b) => b.AppendTab(2).Append("Func<TReturn> ").Append(unionCase.NameAsArgument));
-        builder.AppendLine(") => nameToMatch =>");
+        builder.Append(") => ").Append(NameToMatchParameter).AppendLine(" =>");
         builder.AppendTab().AppendLine("MatchName(");
-        builder.AppendTab(2).AppendLine("nameToMatch,");
+        builder.AppendTab(2).Append(NameToMatchParameter).AppendLine(",");
         builder.Join(
             ",\r\n",
             cases,
@@ -238,6 +240,16 @@ internal static class Renderer
     private static void RenderEndOfMatchFunction(StringBuilder builder)
     {
         builder.AppendTab(2).AppendLine("_ => throw new Exception()");
+        builder.AppendTab().AppendLine("};");
+    }
+
+    private static void RenderEndOfMatchNameFunction(StringBuilder builder, DiscriminatedUnionTypeInfo info)
+    {
+        builder.AppendTab(2)
+            .Append("_ => throw new System.ArgumentOutOfRangeException(nameof(").Append(NameToMatchParameter).Append("), ")
+            .Append(NameToMatchParameter)
+            .Append(", $\"'{").Append(NameToMatchParameter).Append("}' is not the name of a case of ")
+            .Append(info.NameWithParameters).AppendLine(".\")");
         builder.AppendTab().AppendLine("};");
     }
 

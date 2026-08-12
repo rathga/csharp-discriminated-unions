@@ -81,6 +81,65 @@ public class Tests
     }
 
     [Fact]
+    public void MatchNameThrowsWhenNameMatchesNoCase()
+    {
+        var exception = Assert.Throws<ArgumentOutOfRangeException>(() => Shape.MatchName(
+            "Triangle",
+            dot: () => "Dot",
+            square: () => "Square",
+            rectangle: () => "Rectangle"));
+
+        AssertIdentifiesUnmatchedNameAndUnion(exception, "Triangle", nameof(Shape));
+    }
+
+    [Fact]
+    public void CurriedMatchNameThrowsWhenNameMatchesNoCase()
+    {
+        var match = Shape.MatchName(
+            dot: () => "Dot",
+            square: () => "Square",
+            rectangle: () => "Rectangle");
+
+        var exception = Assert.Throws<ArgumentOutOfRangeException>(() => match("Triangle"));
+
+        AssertIdentifiesUnmatchedNameAndUnion(exception, "Triangle", nameof(Shape));
+    }
+
+    [Fact]
+    public void GenericMatchNameThrowsWhenNameMatchesNoCase()
+    {
+        var exception = Assert.Throws<ArgumentOutOfRangeException>(() => Result<int>.MatchName(
+            "Cancelled",
+            success: () => "Success",
+            failure: () => "Failure"));
+
+        AssertIdentifiesUnmatchedNameAndUnion(exception, "Cancelled", nameof(Result<int>));
+    }
+
+    [Fact]
+    public void CurriedGenericMatchNameThrowsWhenNameMatchesNoCase()
+    {
+        var match = Result<int>.MatchName(
+            success: () => "Success",
+            failure: () => "Failure");
+
+        var exception = Assert.Throws<ArgumentOutOfRangeException>(() => match("Cancelled"));
+
+        AssertIdentifiesUnmatchedNameAndUnion(exception, "Cancelled", nameof(Result<int>));
+    }
+
+    private static void AssertIdentifiesUnmatchedNameAndUnion(
+        ArgumentOutOfRangeException exception,
+        string unmatchedName,
+        string unionName)
+    {
+        Assert.Equal(unmatchedName, exception.ActualValue);
+        Assert.Equal("nameToMatch", exception.ParamName);
+        Assert.Contains(unmatchedName, exception.Message);
+        Assert.Contains(unionName, exception.Message);
+    }
+
+    [Fact]
     public void MapNames()
     {
         string Map(string name) => $"{name} name";
