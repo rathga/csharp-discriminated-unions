@@ -83,12 +83,12 @@ public class Tests
     private static void AssertIdentifiesUnmatchedNameAndUnion(
         ArgumentOutOfRangeException exception,
         string unmatchedName,
+        // the union name exactly as the generator renders it: namespace-qualified, open type parameters
         string unionName)
     {
         Assert.Equal(unmatchedName, exception.ActualValue);
         Assert.Equal("nameToMatch", exception.ParamName);
-        Assert.Contains($"'{unmatchedName}'", exception.Message);
-        Assert.Contains(unionName, exception.Message);
+        Assert.Contains($"'{unmatchedName}' is not the name of a case of {unionName}.", exception.Message);
     }
 
     [Fact]
@@ -100,7 +100,7 @@ public class Tests
             square: () => "Square",
             rectangle: () => "Rectangle"));
 
-        AssertIdentifiesUnmatchedNameAndUnion(exception, "Triangle", nameof(Shape));
+        AssertIdentifiesUnmatchedNameAndUnion(exception, "Triangle", "CSharp.DiscriminatedUnions.Tests.Shape");
     }
 
     [Fact]
@@ -113,7 +113,7 @@ public class Tests
 
         var exception = Assert.Throws<ArgumentOutOfRangeException>(() => match("Triangle"));
 
-        AssertIdentifiesUnmatchedNameAndUnion(exception, "Triangle", nameof(Shape));
+        AssertIdentifiesUnmatchedNameAndUnion(exception, "Triangle", "CSharp.DiscriminatedUnions.Tests.Shape");
     }
 
     [Fact]
@@ -124,7 +124,7 @@ public class Tests
             success: () => "Success",
             failure: () => "Failure"));
 
-        AssertIdentifiesUnmatchedNameAndUnion(exception, "Cancelled", "Result<T>");
+        AssertIdentifiesUnmatchedNameAndUnion(exception, "Cancelled", "CSharp.DiscriminatedUnions.Tests.Result<T>");
     }
 
     [Fact]
@@ -136,7 +136,7 @@ public class Tests
 
         var exception = Assert.Throws<ArgumentOutOfRangeException>(() => match("Cancelled"));
 
-        AssertIdentifiesUnmatchedNameAndUnion(exception, "Cancelled", "Result<T>");
+        AssertIdentifiesUnmatchedNameAndUnion(exception, "Cancelled", "CSharp.DiscriminatedUnions.Tests.Result<T>");
     }
 
     [Fact]
