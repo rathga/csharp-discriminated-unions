@@ -194,7 +194,7 @@ internal static class Renderer
         }
 
         builder.AppendTab(2)
-            .Append("_ => throw new System.ArgumentOutOfRangeException(nameof(").Append(NameToMatchParameter).Append("), ")
+            .Append("_ => throw new global::System.ArgumentOutOfRangeException(nameof(").Append(NameToMatchParameter).Append("), ")
             .Append(NameToMatchParameter)
             .Append(", $\"'{").Append(NameToMatchParameter).Append("}' is not the name of a case of ")
             .Append(info.NameWithParameters).AppendLine(".\")");
