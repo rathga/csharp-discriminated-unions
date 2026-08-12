@@ -124,7 +124,7 @@ public class Tests
             success: () => "Success",
             failure: () => "Failure"));
 
-        AssertIdentifiesUnmatchedNameAndUnion(exception, "Cancelled", nameof(Result<int>));
+        AssertIdentifiesUnmatchedNameAndUnion(exception, "Cancelled", "Result<T>");
     }
 
     [Fact]
@@ -136,7 +136,7 @@ public class Tests
 
         var exception = Assert.Throws<ArgumentOutOfRangeException>(() => match("Cancelled"));
 
-        AssertIdentifiesUnmatchedNameAndUnion(exception, "Cancelled", nameof(Result<int>));
+        AssertIdentifiesUnmatchedNameAndUnion(exception, "Cancelled", "Result<T>");
     }
 
     [Fact]
