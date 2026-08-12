@@ -80,6 +80,65 @@ public class Tests
         Assert.Equal("Rectangle", match("Rectangle"));
     }
 
+    private static void AssertIdentifiesUnmatchedNameAndUnion(
+        ArgumentOutOfRangeException exception,
+        string unmatchedName,
+        // the union name exactly as the generator renders it: namespace-qualified, open type parameters
+        string unionName)
+    {
+        Assert.Equal(unmatchedName, exception.ActualValue);
+        Assert.Equal("nameToMatch", exception.ParamName);
+        Assert.Contains($"'{unmatchedName}' is not the name of a case of {unionName}.", exception.Message);
+    }
+
+    [Fact]
+    public void MatchNameThrowsWhenNameMatchesNoCase()
+    {
+        var exception = Assert.Throws<ArgumentOutOfRangeException>(() => Shape.MatchName(
+            "Triangle",
+            dot: () => "Dot",
+            square: () => "Square",
+            rectangle: () => "Rectangle"));
+
+        AssertIdentifiesUnmatchedNameAndUnion(exception, "Triangle", "CSharp.DiscriminatedUnions.Tests.Shape");
+    }
+
+    [Fact]
+    public void CurriedMatchNameThrowsWhenNameMatchesNoCase()
+    {
+        var match = Shape.MatchName(
+            dot: () => "Dot",
+            square: () => "Square",
+            rectangle: () => "Rectangle");
+
+        var exception = Assert.Throws<ArgumentOutOfRangeException>(() => match("Triangle"));
+
+        AssertIdentifiesUnmatchedNameAndUnion(exception, "Triangle", "CSharp.DiscriminatedUnions.Tests.Shape");
+    }
+
+    [Fact]
+    public void GenericMatchNameThrowsWhenNameMatchesNoCase()
+    {
+        var exception = Assert.Throws<ArgumentOutOfRangeException>(() => Result<int>.MatchName(
+            "Cancelled",
+            success: () => "Success",
+            failure: () => "Failure"));
+
+        AssertIdentifiesUnmatchedNameAndUnion(exception, "Cancelled", "CSharp.DiscriminatedUnions.Tests.Result<T>");
+    }
+
+    [Fact]
+    public void CurriedGenericMatchNameThrowsWhenNameMatchesNoCase()
+    {
+        var match = Result<int>.MatchName(
+            success: () => "Success",
+            failure: () => "Failure");
+
+        var exception = Assert.Throws<ArgumentOutOfRangeException>(() => match("Cancelled"));
+
+        AssertIdentifiesUnmatchedNameAndUnion(exception, "Cancelled", "CSharp.DiscriminatedUnions.Tests.Result<T>");
+    }
+
     [Fact]
     public void MapNames()
     {
