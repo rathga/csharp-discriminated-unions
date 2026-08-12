@@ -193,7 +193,12 @@ internal static class Renderer
             builder.AppendTab(2).Append('"').Append(unionCase.Name).Append("\" => ").Append(unionCase.NameAsArgument).AppendLine("(),");
         }
 
-        RenderEndOfMatchNameFunction(builder, info);
+        builder.AppendTab(2)
+            .Append("_ => throw new System.ArgumentOutOfRangeException(nameof(").Append(NameToMatchParameter).Append("), ")
+            .Append(NameToMatchParameter)
+            .Append(", $\"'{").Append(NameToMatchParameter).Append("}' is not the name of a case of ")
+            .Append(info.NameWithParameters).AppendLine(".\")");
+        builder.AppendTab().AppendLine("};");
 
         builder.AppendTab().AppendLine("public static Func<string, TReturn> MatchName<TReturn>(");
         builder.Join(
@@ -240,16 +245,6 @@ internal static class Renderer
     private static void RenderEndOfMatchFunction(StringBuilder builder)
     {
         builder.AppendTab(2).AppendLine("_ => throw new Exception()");
-        builder.AppendTab().AppendLine("};");
-    }
-
-    private static void RenderEndOfMatchNameFunction(StringBuilder builder, DiscriminatedUnionTypeInfo info)
-    {
-        builder.AppendTab(2)
-            .Append("_ => throw new System.ArgumentOutOfRangeException(nameof(").Append(NameToMatchParameter).Append("), ")
-            .Append(NameToMatchParameter)
-            .Append(", $\"'{").Append(NameToMatchParameter).Append("}' is not the name of a case of ")
-            .Append(info.NameWithParameters).AppendLine(".\")");
         builder.AppendTab().AppendLine("};");
     }
 

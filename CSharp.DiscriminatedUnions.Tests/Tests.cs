@@ -80,6 +80,17 @@ public class Tests
         Assert.Equal("Rectangle", match("Rectangle"));
     }
 
+    private static void AssertIdentifiesUnmatchedNameAndUnion(
+        ArgumentOutOfRangeException exception,
+        string unmatchedName,
+        string unionName)
+    {
+        Assert.Equal(unmatchedName, exception.ActualValue);
+        Assert.Equal("nameToMatch", exception.ParamName);
+        Assert.Contains($"'{unmatchedName}'", exception.Message);
+        Assert.Contains(unionName, exception.Message);
+    }
+
     [Fact]
     public void MatchNameThrowsWhenNameMatchesNoCase()
     {
@@ -126,17 +137,6 @@ public class Tests
         var exception = Assert.Throws<ArgumentOutOfRangeException>(() => match("Cancelled"));
 
         AssertIdentifiesUnmatchedNameAndUnion(exception, "Cancelled", nameof(Result<int>));
-    }
-
-    private static void AssertIdentifiesUnmatchedNameAndUnion(
-        ArgumentOutOfRangeException exception,
-        string unmatchedName,
-        string unionName)
-    {
-        Assert.Equal(unmatchedName, exception.ActualValue);
-        Assert.Equal("nameToMatch", exception.ParamName);
-        Assert.Contains(unmatchedName, exception.Message);
-        Assert.Contains(unionName, exception.Message);
     }
 
     [Fact]
